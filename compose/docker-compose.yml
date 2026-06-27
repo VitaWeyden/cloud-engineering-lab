@@ -1,0 +1,121 @@
+# Cloud Engineering Lab – main orchestration file
+#
+# This file does NOT build images. It only pulls pre-built images from GHCR.
+# Images are built and pushed automatically by GitHub Actions in each app repo.
+#
+# Available at:
+#   Violet-board  →  http://localhost:8000
+#   Echoo         →  http://localhost:8080
+#
+# Start:
+#   docker compose --env-file .env up -d
+#
+# Stop:
+#   docker compose down
+#
+# Pull latest images and restart:
+#   docker compose pull && docker compose up -d
+
+services:
+
+  # ── Violet-board (webshop) ────────────────────────────────────────────────
+
+  violetboard-app:
+    image: ghcr.io/vitaweyden/violet-board-app:latest
+    restart: unless-stopped
+    env_file: violetboard.env
+    environment:
+      APP_ENV: production
+      DB_CONNECTION: pgsql
+      DB_HOST: violetboard-db
+      DB_PORT: 5432
+    depends_on:
+      violetboard-db:
+        condition: service_healthy
+    networks:
+      violetboard-net:
+        aliases:
+          - app  # nginx.conf uses fastcgi_pass app:9000 – this alias resolves it
+
+  violetboard-web:
+    image: ghcr.io/vitaweyden/violet-board-web:latest
+    restart: unless-stopped
+    ports:
+      - "8000:80"
+    depends_on:
+      - violetboard-app
+    networks:
+      - violetboard-net
+
+  violetboard-db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${VIOLETBOARD_DB_NAME:-violetboard}
+      POSTGRES_USER: ${VIOLETBOARD_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${VIOLETBOARD_DB_PASSWORD}
+    volumes:
+      - violetboard-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${VIOLETBOARD_DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - violetboard-net
+
+  # ── Echoo (chat app) ──────────────────────────────────────────────────────
+
+  echoo-backend:
+    image: ghcr.io/vitaweyden/echoo-backend:latest
+    restart: unless-stopped
+    env_file: echoo.env
+    environment:
+      HOST: 0.0.0.0
+      NODE_ENV: production
+      DB_HOST: echoo-db
+      DB_PORT: 5432
+    depends_on:
+      echoo-db:
+        condition: service_healthy
+    networks:
+      - echoo-net
+
+  echoo-frontend:
+    image: ghcr.io/vitaweyden/echoo-frontend:latest
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+    depends_on:
+      - echoo-backend
+    networks:
+      - echoo-net
+
+  echoo-db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${ECHOO_DB_NAME:-ECHOO}
+      POSTGRES_USER: ${ECHOO_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${ECHOO_DB_PASSWORD}
+    volumes:
+      - echoo-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${ECHOO_DB_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - echoo-net
+
+# ── Volumes & Networks ────────────────────────────────────────────────────────
+
+volumes:
+  violetboard-pgdata:
+  echoo-pgdata:
+
+networks:
+  violetboard-net:
+    driver: bridge
+  echoo-net:
+    driver: bridge
