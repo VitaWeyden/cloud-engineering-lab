@@ -44,20 +44,23 @@ def generate_violetboard_key():
 def generate_echoo_key():
     return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
 
-def is_env_complete(env_file):
+def is_env_complete(env_file, required_keys):
     if not os.path.exists(env_file):
         return False
     with open(env_file) as f:
         content = f.read()
     for line in content.splitlines():
-        if line.startswith("APP_KEY=") and line.strip() == "APP_KEY=":
-            return False
-        if line.startswith("POSTGRES_PASSWORD=") and line.strip() == "POSTGRES_PASSWORD=":
-            return False
+        for key in required_keys:
+            if line.startswith(f"{key}=") and line.strip() == f"{key}=":
+                return False
     return True
 
-def setup_env(env_file, example_file, app_name, key_generator):
-    if is_env_complete(env_file):
+def setup_env(env_file, example_file, app_name, key_generator=None):
+    required = ["POSTGRES_PASSWORD"] if key_generator else ["GRAFANA_PASSWORD"]
+    if key_generator:
+        required.append("APP_KEY")
+
+    if is_env_complete(env_file, required):
         success(f"{env_file} already exists and is complete, skipping")
         return True
 
@@ -70,11 +73,12 @@ def setup_env(env_file, example_file, app_name, key_generator):
     with open(example_file) as f:
         lines = f.readlines()
 
-    app_key = key_generator()
-    info("APP_KEY generated automatically")
+    app_key = key_generator() if key_generator else None
+    if app_key:
+        info("APP_KEY generated automatically")
 
-    db_password = input(f"{CYAN}[?]{RESET} Enter a PostgreSQL password for {app_name}: ").strip()
-    if not db_password:
+    password = input(f"{CYAN}[?]{RESET} Enter a password for {app_name}: ").strip()
+    if not password:
         error("Password cannot be empty")
         return False
 
@@ -85,10 +89,10 @@ def setup_env(env_file, example_file, app_name, key_generator):
                 f.write(line)
                 continue
             key = stripped.split("=")[0].strip()
-            if key == "APP_KEY":
+            if key == "APP_KEY" and app_key:
                 f.write(f"APP_KEY={app_key}\n")
-            elif key in ("DB_PASSWORD", "POSTGRES_PASSWORD"):
-                f.write(f"{key}={db_password}\n")
+            elif key in ("DB_PASSWORD", "POSTGRES_PASSWORD", "GRAFANA_PASSWORD"):
+                f.write(f"{key}={password}\n")
             else:
                 f.write(line)
 
@@ -140,7 +144,17 @@ def main():
         sys.exit(1)
     print()
 
-    # 4. Pull latest images and start
+    # 4. Monitoring env
+    info("Setting up Monitoring environment...")
+    if not setup_env(
+        env_file="monitoring.env",
+        example_file="monitoring.env.example",
+        app_name="Grafana",
+    ):
+        sys.exit(1)
+    print()
+
+    # 5. Pull latest images and start
     info("Pulling latest images from GHCR...")
     run("docker compose pull")
     print()
@@ -156,6 +170,8 @@ def main():
     print()
     print(f"  {GREEN}Violet-board:{RESET}  http://localhost:8100")
     print(f"  {GREEN}Echoo:{RESET}         http://localhost:8101")
+    print(f"  {GREEN}Grafana:{RESET}       http://localhost:3000")
+    print(f"  {GREEN}Prometheus:{RESET}    http://localhost:9090")
     print()
     print(f"  {YELLOW}Logs:{RESET}   docker compose logs -f")
     print(f"  {YELLOW}Stop:{RESET}   docker compose down")

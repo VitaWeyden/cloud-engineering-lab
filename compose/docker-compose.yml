@@ -10,6 +10,12 @@
 # To re-seed the database (e.g. after a full reset):
 #   docker compose down -v
 #   docker compose up -d
+#
+# Available at:
+#   Violet-board  →  http://localhost:8100
+#   Echoo         →  http://localhost:8101
+#   Grafana       →  http://localhost:3000  (admin / admin)
+#   Prometheus    →  http://localhost:9090
 
 services:
 
@@ -105,6 +111,66 @@ services:
     networks:
       - echoo-net
 
+  # ── Monitoring ────────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ../monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=7d'
+    networks:
+      - monitoring-net
+
+  grafana:
+    env_file: monitoring.env
+    image: grafana/grafana:latest
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    networks:
+      - monitoring-net
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    restart: unless-stopped
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+    networks:
+      - monitoring-net
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    restart: unless-stopped
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+    networks:
+      - monitoring-net
+
 # ── Volumes & Networks ────────────────────────────────────────────────────────
 
 volumes:
@@ -112,9 +178,13 @@ volumes:
   violetboard-seeded:
   echoo-pgdata:
   echoo-seeded:
+  prometheus-data:
+  grafana-data:
 
 networks:
   violetboard-net:
     driver: bridge
   echoo-net:
+    driver: bridge
+  monitoring-net:
     driver: bridge
