@@ -3,18 +3,13 @@
 # This file does NOT build images. It only pulls pre-built images from GHCR.
 # Images are built and pushed automatically by GitHub Actions in each app repo.
 #
-# Available at:
-#   Violet-board  →  http://localhost:8000
-#   Echoo         →  http://localhost:8080
+# Start:   python start.py
+# Stop:    docker compose down
+# Update:  docker compose pull && docker compose up -d
 #
-# Start:
-#   docker compose --env-file .env up -d
-#
-# Stop:
-#   docker compose down
-#
-# Pull latest images and restart:
-#   docker compose pull && docker compose up -d
+# To re-seed the database (e.g. after a full reset):
+#   docker compose down -v
+#   docker compose up -d
 
 services:
 
@@ -29,19 +24,21 @@ services:
       DB_CONNECTION: pgsql
       DB_HOST: violetboard-db
       DB_PORT: 5432
+    volumes:
+      - violetboard-seeded:/var/www/.seed-marker
     depends_on:
       violetboard-db:
         condition: service_healthy
     networks:
       violetboard-net:
         aliases:
-          - app  # nginx.conf uses fastcgi_pass app:9000 – this alias resolves it
+          - app
 
   violetboard-web:
     image: ghcr.io/vitaweyden/violet-board-web:latest
     restart: unless-stopped
     ports:
-      - "8000:80"
+      - "8100:80"
     depends_on:
       - violetboard-app
     networks:
@@ -50,14 +47,11 @@ services:
   violetboard-db:
     image: postgres:15-alpine
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${VIOLETBOARD_DB_NAME:-violetboard}
-      POSTGRES_USER: ${VIOLETBOARD_DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${VIOLETBOARD_DB_PASSWORD}
+    env_file: violetboard.env
     volumes:
       - violetboard-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${VIOLETBOARD_DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -72,9 +66,15 @@ services:
     env_file: echoo.env
     environment:
       HOST: 0.0.0.0
+      PORT: 3333
       NODE_ENV: production
+      LOG_LEVEL: info
       DB_HOST: echoo-db
       DB_PORT: 5432
+    volumes:
+      - echoo-seeded:/app/.seed-marker
+    ports:
+      - "3334:3333"
     depends_on:
       echoo-db:
         condition: service_healthy
@@ -85,7 +85,7 @@ services:
     image: ghcr.io/vitaweyden/echoo-frontend:latest
     restart: unless-stopped
     ports:
-      - "8080:80"
+      - "8101:80"
     depends_on:
       - echoo-backend
     networks:
@@ -94,14 +94,11 @@ services:
   echoo-db:
     image: postgres:15-alpine
     restart: unless-stopped
-    environment:
-      POSTGRES_DB: ${ECHOO_DB_NAME:-ECHOO}
-      POSTGRES_USER: ${ECHOO_DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${ECHOO_DB_PASSWORD}
+    env_file: echoo.env
     volumes:
       - echoo-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${ECHOO_DB_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -112,7 +109,9 @@ services:
 
 volumes:
   violetboard-pgdata:
+  violetboard-seeded:
   echoo-pgdata:
+  echoo-seeded:
 
 networks:
   violetboard-net:

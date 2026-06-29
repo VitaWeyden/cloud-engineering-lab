@@ -1,0 +1,165 @@
+#!/usr/bin/env python3
+
+import os
+import shutil
+import subprocess
+import sys
+import secrets
+import base64
+
+GREEN  = "\033[92m"
+YELLOW = "\033[93m"
+RED    = "\033[91m"
+CYAN   = "\033[96m"
+RESET  = "\033[0m"
+
+def info(msg):    print(f"{CYAN}[•]{RESET} {msg}")
+def success(msg): print(f"{GREEN}[✓]{RESET} {msg}")
+def warn(msg):    print(f"{YELLOW}[!]{RESET} {msg}")
+def error(msg):   print(f"{RED}[✗]{RESET} {msg}")
+
+def run(cmd, **kwargs):
+    return subprocess.run(cmd, shell=True, **kwargs)
+
+def check_prerequisites():
+    ok = True
+    if shutil.which("docker"):
+        success("docker found")
+    else:
+        error("docker not found – install Docker Desktop: https://docs.docker.com/get-docker/")
+        ok = False
+
+    result = run("docker compose version", capture_output=True)
+    if result.returncode == 0:
+        success("docker compose found")
+    else:
+        error("docker compose not found")
+        ok = False
+
+    return ok
+
+def generate_violetboard_key():
+    return "base64:" + base64.b64encode(secrets.token_bytes(32)).decode()
+
+def generate_echoo_key():
+    return base64.urlsafe_b64encode(secrets.token_bytes(32)).decode()
+
+def is_env_complete(env_file):
+    if not os.path.exists(env_file):
+        return False
+    with open(env_file) as f:
+        content = f.read()
+    for line in content.splitlines():
+        if line.startswith("APP_KEY=") and line.strip() == "APP_KEY=":
+            return False
+        if line.startswith("POSTGRES_PASSWORD=") and line.strip() == "POSTGRES_PASSWORD=":
+            return False
+    return True
+
+def setup_env(env_file, example_file, app_name, key_generator):
+    if is_env_complete(env_file):
+        success(f"{env_file} already exists and is complete, skipping")
+        return True
+
+    if os.path.exists(env_file):
+        warn(f"{env_file} exists but is incomplete – recreating...")
+        os.remove(env_file)
+    else:
+        warn(f"{env_file} not found – creating from example...")
+
+    with open(example_file) as f:
+        lines = f.readlines()
+
+    app_key = key_generator()
+    info("APP_KEY generated automatically")
+
+    db_password = input(f"{CYAN}[?]{RESET} Enter a PostgreSQL password for {app_name}: ").strip()
+    if not db_password:
+        error("Password cannot be empty")
+        return False
+
+    with open(env_file, "w") as f:
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith("#") or not stripped:
+                f.write(line)
+                continue
+            key = stripped.split("=")[0].strip()
+            if key == "APP_KEY":
+                f.write(f"APP_KEY={app_key}\n")
+            elif key in ("DB_PASSWORD", "POSTGRES_PASSWORD"):
+                f.write(f"{key}={db_password}\n")
+            else:
+                f.write(line)
+
+    success(f"{env_file} created")
+    return True
+
+def main():
+    print()
+    print(f"{CYAN}{'─' * 50}")
+    print(f"  cloud-engineering-lab – setup & start")
+    print(f"{'─' * 50}{RESET}")
+    print()
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    compose_dir = os.path.join(script_dir, "compose")
+
+    if not os.path.exists(compose_dir):
+        error("compose/ folder not found.")
+        error("Make sure you are running this script from the cloud-engineering-lab/ folder.")
+        sys.exit(1)
+
+    os.chdir(compose_dir)
+
+    # 1. Prerequisites
+    info("Checking prerequisites...")
+    if not check_prerequisites():
+        sys.exit(1)
+    print()
+
+    # 2. Violet-board env
+    info("Setting up Violet-board environment...")
+    if not setup_env(
+        env_file="violetboard.env",
+        example_file="violetboard.env.example",
+        app_name="Violet-board",
+        key_generator=generate_violetboard_key,
+    ):
+        sys.exit(1)
+    print()
+
+    # 3. Echoo env
+    info("Setting up Echoo environment...")
+    if not setup_env(
+        env_file="echoo.env",
+        example_file="echoo.env.example",
+        app_name="Echoo",
+        key_generator=generate_echoo_key,
+    ):
+        sys.exit(1)
+    print()
+
+    # 4. Pull latest images and start
+    info("Pulling latest images from GHCR...")
+    run("docker compose pull")
+    print()
+
+    info("Starting containers...")
+    result = run("docker compose up -d")
+    if result.returncode != 0:
+        error("docker compose failed – check the output above")
+        sys.exit(1)
+
+    print()
+    success("Everything is running!")
+    print()
+    print(f"  {GREEN}Violet-board:{RESET}  http://localhost:8100")
+    print(f"  {GREEN}Echoo:{RESET}         http://localhost:8101")
+    print()
+    print(f"  {YELLOW}Logs:{RESET}   docker compose logs -f")
+    print(f"  {YELLOW}Stop:{RESET}   docker compose down")
+    print()
+
+if __name__ == "__main__":
+    main()
