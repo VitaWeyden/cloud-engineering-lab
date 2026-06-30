@@ -1,0 +1,76 @@
+# PostgreSQL database for Violet-board.
+# Uses a PersistentVolumeClaim so data survives pod restarts.
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: violetboard-db-pvc
+  namespace: violetboard
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: violetboard-db
+  namespace: violetboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: violetboard-db
+  template:
+    metadata:
+      labels:
+        app: violetboard-db
+    spec:
+      containers:
+        - name: violetboard-db
+          image: postgres:15-alpine
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: violetboard
+            - name: POSTGRES_USER
+              value: postgres
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: violetboard-secret
+                  key: DB_PASSWORD
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: pgdata
+          persistentVolumeClaim:
+            claimName: violetboard-db-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: violetboard-db
+  namespace: violetboard
+spec:
+  selector:
+    app: violetboard-db
+  ports:
+    - port: 5432
+      targetPort: 5432

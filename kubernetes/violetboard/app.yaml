@@ -1,0 +1,86 @@
+# PHP-FPM application container for Violet-board.
+# Service is named "app" to match the fastcgi_pass directive in nginx.conf.
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: violetboard-seeded-pvc
+  namespace: violetboard
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Mi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: violetboard-app
+  namespace: violetboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: violetboard-app
+  template:
+    metadata:
+      labels:
+        app: violetboard-app
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -h violetboard-db -U postgres; do echo waiting for db; sleep 2; done
+      containers:
+        - name: violetboard-app
+          image: ghcr.io/vitaweyden/violet-board-app:latest
+          ports:
+            - containerPort: 9000
+          env:
+            - name: APP_ENV
+              value: production
+            - name: DB_CONNECTION
+              value: pgsql
+            - name: DB_HOST
+              value: violetboard-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_DATABASE
+              value: violetboard
+            - name: DB_USERNAME
+              value: postgres
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: violetboard-secret
+                  key: DB_PASSWORD
+            - name: APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: violetboard-secret
+                  key: APP_KEY
+          volumeMounts:
+            - name: seed-marker
+              mountPath: /var/www/.seed-marker
+      volumes:
+        - name: seed-marker
+          persistentVolumeClaim:
+            claimName: violetboard-seeded-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app
+  namespace: violetboard
+spec:
+  selector:
+    app: violetboard-app
+  ports:
+    - port: 9000
+      targetPort: 9000

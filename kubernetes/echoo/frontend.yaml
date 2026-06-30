@@ -1,0 +1,37 @@
+# Quasar PWA frontend for Echoo.
+# Exposed externally via a LoadBalancer service on port 8101.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echoo-frontend
+  namespace: echoo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echoo-frontend
+  template:
+    metadata:
+      labels:
+        app: echoo-frontend
+    spec:
+      containers:
+        - name: echoo-frontend
+          image: ghcr.io/vitaweyden/echoo-frontend:latest
+          ports:
+            - containerPort: 80
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echoo-frontend
+  namespace: echoo
+spec:
+  type: LoadBalancer
+  selector:
+    app: echoo-frontend
+  ports:
+    - port: 8101
+      targetPort: 80

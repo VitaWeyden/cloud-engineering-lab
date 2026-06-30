@@ -1,0 +1,91 @@
+# AdonisJS backend for Echoo.
+# Also includes a PVC for the seed marker so seeding only runs once.
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: echoo-seeded-pvc
+  namespace: echoo
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Mi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: echoo-backend
+  namespace: echoo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: echoo-backend
+  template:
+    metadata:
+      labels:
+        app: echoo-backend
+    spec:
+      initContainers:
+        - name: wait-for-db
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - until pg_isready -h echoo-db -U postgres; do echo waiting for db; sleep 2; done
+      containers:
+        - name: echoo-backend
+          image: ghcr.io/vitaweyden/echoo-backend:latest
+          ports:
+            - containerPort: 3333
+          env:
+            - name: HOST
+              value: "0.0.0.0"
+            - name: PORT
+              value: "3333"
+            - name: NODE_ENV
+              value: production
+            - name: LOG_LEVEL
+              value: info
+            - name: DB_HOST
+              value: echoo-db
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: postgres
+            - name: DB_DATABASE
+              value: ECHOO
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: echoo-secret
+                  key: DB_PASSWORD
+            - name: APP_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: echoo-secret
+                  key: APP_KEY
+          volumeMounts:
+            - name: seed-marker
+              mountPath: /app/.seed-marker
+      volumes:
+        - name: seed-marker
+          persistentVolumeClaim:
+            claimName: echoo-seeded-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: echoo-backend
+  namespace: echoo
+spec:
+  type: LoadBalancer
+  selector:
+    app: echoo-backend
+  ports:
+    - port: 3334
+      targetPort: 3333
