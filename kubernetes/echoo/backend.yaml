@@ -87,5 +87,5 @@ spec:
   selector:
     app: echoo-backend
   ports:
-    - port: 3334
+    - port: 3344
       targetPort: 3333

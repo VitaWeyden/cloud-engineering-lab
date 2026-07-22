@@ -13,7 +13,7 @@ data:
       - name: Prometheus
         type: prometheus
         access: proxy
-        url: http://prometheus:9090
+        url: http://prometheus:9099
         isDefault: true
         editable: false
 
@@ -110,5 +110,5 @@ spec:
   selector:
     app: grafana
   ports:
-    - port: 3000
+    - port: 3010
       targetPort: 3000

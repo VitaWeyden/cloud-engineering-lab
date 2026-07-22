@@ -50,11 +50,11 @@ def create_cluster(name):
     warn(f"Cluster '{name}' not found – creating...")
     args = [
         "k3d", "cluster", "create", name,
-        "--port", "8100:8100@loadbalancer",
-        "--port", "8101:8101@loadbalancer",
-        "--port", "3334:3334@loadbalancer",
-        "--port", "3000:3000@loadbalancer",
-        "--port", "9090:9090@loadbalancer",
+        "--port", "8110:8110@loadbalancer",
+        "--port", "8111:8111@loadbalancer",
+        "--port", "3344:3344@loadbalancer",
+        "--port", "3010:3010@loadbalancer",
+        "--port", "9099:9099@loadbalancer",
     ]
     result = run(args)
     if result.returncode != 0:
@@ -271,10 +271,10 @@ def main():
 
     success("Kubernetes environment is ready!")
     print()
-    print(f"  {GREEN}Violet-board:{RESET}  http://localhost:8100")
-    print(f"  {GREEN}Echoo:{RESET}         http://localhost:8101")
-    print(f"  {GREEN}Grafana:{RESET}       http://localhost:3000")
-    print(f"  {GREEN}Prometheus:{RESET}    http://localhost:9090")
+    print(f"  {GREEN}Violet-board:{RESET}  http://localhost:8110")
+    print(f"  {GREEN}Echoo:{RESET}         http://localhost:8111")
+    print(f"  {GREEN}Grafana:{RESET}       http://localhost:3010")
+    print(f"  {GREEN}Prometheus:{RESET}    http://localhost:9099")
     print()
     print(f"  {YELLOW}Check pods:{RESET}  kubectl get pods --all-namespaces")
     print(f"  {YELLOW}Stop:{RESET}        k3d cluster stop cloud-engineering-lab")

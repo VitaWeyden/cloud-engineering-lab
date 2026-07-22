@@ -1,0 +1,14 @@
+# Contains secrets (passwords, keys) in plain text - never commit this.
+*.tfstate
+*.tfstate.*
+
+# Local Terraform working directory (downloaded providers, etc.)
+.terraform/
+.terraform.lock.hcl
+
+# Any local variable overrides you don't want to share
+*.tfvars
+!*.tfvars.example
+
+crash.log
+crash.*.log

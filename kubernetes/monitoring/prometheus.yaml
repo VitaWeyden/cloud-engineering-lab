@@ -87,5 +87,5 @@ spec:
   selector:
     app: prometheus
   ports:
-    - port: 9090
+    - port: 9099
       targetPort: 9090

@@ -12,6 +12,8 @@ This repository contains the infrastructure and deployment configuration for two
 
 The goal is to learn and demonstrate real-world DevOps and Cloud Engineering practices: containerization, automated CI/CD pipelines, orchestration, monitoring, and infrastructure as code.
 
+See [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for real issues hit while building this (Terraform gotchas, Kubernetes scheduling deadlocks, and how they were diagnosed and fixed).
+
 ## Milestones
 
 - [x] Docker Compose orchestration
@@ -19,7 +21,7 @@ The goal is to learn and demonstrate real-world DevOps and Cloud Engineering pra
 - [x] GitHub Container Registry image storage
 - [x] Monitoring (Prometheus + Grafana)
 - [x] Kubernetes (K3s via k3d)
-- [ ] Terraform
+- [x] Terraform
 - [ ] Cloud deployment (Oracle Cloud)
 
 ## Applications
@@ -71,6 +73,7 @@ cloud-engineering-lab/
 │
 ├── compose/                        # Docker Compose orchestration
 │   ├── docker-compose.yml
+│   ├── start.py                    # One-command setup and start script
 │   ├── violetboard.env.example
 │   ├── echoo.env.example
 │   └── monitoring.env.example
@@ -102,9 +105,9 @@ cloud-engineering-lab/
 │       └── dashboards/
 │           └── node-exporter.json
 │
-├── terraform/                      # (coming soon) Infrastructure as Code
+├── terraform/                      # Infrastructure as Code
 │
-├── start.py                        # Docker Compose setup and start script
+├── TROUBLESHOOTING.md               # Real issues hit, causes, and fixes
 └── README.md
 ```
 
@@ -125,7 +128,7 @@ The simpler option. No Kubernetes.
 ```bash
 git clone https://github.com/VitaWeyden/cloud-engineering-lab.git   # If you haven't downloaded it yet
 cd cloud-engineering-lab
-python start.py
+python compose/start.py
 ```
 
 The script automatically creates `.env` files, generates secret keys, pulls images from GHCR, and starts all containers.
@@ -199,10 +202,12 @@ The script automatically:
 
 | Service | URL |
 |---|---|
-| Violet-board | http://localhost:8100 |
-| Echoo | http://localhost:8101 |
-| Grafana | http://localhost:3000 |
-| Prometheus | http://localhost:9090 |
+| Violet-board | http://localhost:8110 |
+| Echoo | http://localhost:8111 |
+| Grafana | http://localhost:3010 |
+| Prometheus | http://localhost:9099 |
+
+Note: these ports are intentionally different from the Docker Compose mode's ports (8100/8101/3000/9090) so that both modes can run at the same time without a port conflict.
 
 ### Check pod status
 
@@ -236,9 +241,62 @@ k3d cluster delete cloud-engineering-lab
 
 **PersistentVolumeClaims** – each database and the seed marker use a PVC so data survives pod restarts. A full reset requires deleting the cluster with `k3d cluster delete`.
 
+**Terraform** – an experimental `terraform/` path exists that recreates the cluster/namespace/secret setup declaratively, as an alternative to `kubernetes/setup.py`. Important: don't run `kubernetes/setup.py` and `terraform apply` against the same cluster — pick one or the other, since both try to create the same secrets and namespaces.
+
 **cAdvisor** – intentionally excluded from the local k3d setup. cAdvisor requires access to the Docker socket which is not available inside k3d on Windows/macOS (Docker Desktop runs containers inside a Linux VM). It will be added when deploying to Oracle Cloud where a real Linux host is available.
 
 **Monitoring** – Node Exporter (host metrics) and kube-state-metrics (Kubernetes object metrics) are included and work locally. The Node Exporter Full dashboard is provisioned automatically via ConfigMap.
+
+---
+
+## Option C – Terraform
+
+A declarative alternative to `kubernetes/setup.py`: the same k3d cluster, namespaces, secrets, and deployments, but described in HCL instead of built with kubectl commands one by one. Builds on the same k3d cluster as Option B — don't run `kubernetes/setup.py` and `terraform apply` against the same cluster.
+
+### Prerequisites
+
+- Everything from Option B (Docker Desktop, kubectl, k3d)
+- [Terraform](https://developer.hashicorp.com/terraform/install) (>= 1.5.0)
+
+### Run
+
+```bash
+cd terraform
+terraform init      # only needed once, or after changing versions.tf
+```
+
+**If the cluster doesn't exist yet** (first run, or after `k3d cluster delete`), the Kubernetes provider can't connect until the cluster exists — so create it first, then apply everything else:
+
+```bash
+terraform apply -target=null_resource.k3d_cluster
+terraform apply
+```
+
+**If the cluster already exists** (you're just changing something), a single `terraform apply` is enough.
+
+| Service | URL |
+|---|---|
+| Violet-board | http://localhost:8110 |
+| Echoo | http://localhost:8111 |
+| Grafana | http://localhost:3010 |
+| Prometheus | http://localhost:9099 |
+
+Grafana's generated admin password isn't printed by default (it's marked `sensitive`):
+```bash
+terraform output grafana_password
+```
+
+### Destroy everything (including the cluster)
+
+```bash
+terraform destroy
+```
+
+### Notes
+
+- `terraform.tfstate` contains generated passwords and keys in plain text — it's git-ignored, never commit it.
+- The `null_resource.k3d_cluster` provisioner (`cluster.tf`) currently assumes **Windows + PowerShell**. On macOS/Linux the `interpreter` line and the command would need to be rewritten in plain `sh`.
+- Images are pulled with the `:latest` tag, same as in Option B. Terraform won't notice when a new image is pushed to GHCR (the tag string in the `.tf` file doesn't change) — after a new push, restart the deployments manually: `kubectl rollout restart deployment/<name> -n <namespace>`.
 
 ---
 
@@ -252,7 +310,7 @@ The Node Exporter Full dashboard is provisioned automatically. To import additio
 
 ### Prometheus targets
 
-Available at http://localhost:9090/targets:
+Available at http://localhost:9090/targets (Docker Compose mode) or http://localhost:9099/targets (Kubernetes mode):
 - `prometheus` – Prometheus itself
 - `node-exporter` – host machine metrics
 - `kube-state-metrics` – Kubernetes object metrics (Kubernetes mode only)

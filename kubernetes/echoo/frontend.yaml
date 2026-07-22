@@ -1,5 +1,5 @@
 # Quasar PWA frontend for Echoo.
-# Exposed externally via a LoadBalancer service on port 8101.
+# Exposed externally via a LoadBalancer service on port 8111.
 
 apiVersion: apps/v1
 kind: Deployment
@@ -33,5 +33,5 @@ spec:
   selector:
     app: echoo-frontend
   ports:
-    - port: 8101
+    - port: 8111
       targetPort: 80

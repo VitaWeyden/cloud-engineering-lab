@@ -107,14 +107,13 @@ def main():
     print()
 
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    compose_dir = os.path.join(script_dir, "compose")
 
-    if not os.path.exists(compose_dir):
-        error("compose/ folder not found.")
-        error("Make sure you are running this script from the cloud-engineering-lab/ folder.")
+    if not os.path.exists(os.path.join(script_dir, "docker-compose.yml")):
+        error("docker-compose.yml not found next to this script.")
+        error("Make sure you are running this from inside the compose/ folder (or via `python compose/start.py` from the repo root).")
         sys.exit(1)
 
-    os.chdir(compose_dir)
+    os.chdir(script_dir)
 
     # 1. Prerequisites
     info("Checking prerequisites...")

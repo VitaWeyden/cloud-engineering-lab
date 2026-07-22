@@ -1,7 +1,7 @@
 # Nginx web container for Violet-board.
-# Exposed externally via a LoadBalancer service on port 8100.
+# Exposed externally via a LoadBalancer service on port 8110.
 # k3d routes this automatically because the cluster was created with
-# --port "8100:8100@loadbalancer".
+# --port "8110:8110@loadbalancer".
 
 apiVersion: apps/v1
 kind: Deployment
@@ -35,5 +35,5 @@ spec:
   selector:
     app: violetboard-web
   ports:
-    - port: 8100
+    - port: 8110
       targetPort: 80
